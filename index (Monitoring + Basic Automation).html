@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>My Home</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="angular.min.js"></script>
+    <script src="angular-socket.js"></script>
+	<script src="Chart.min.js"></script>
+	<script src="angular-chart.min.js"></script>
+    <script src="http://194.95.194.122:8086/socket.io/socket.io.js"></script>
+	<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.9/angular-route.js"></script>
+	<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.9/angular-messages.min.js"></script>
+	
+</head>
+<body ng-app="myApp" ng-controller="homecontrol" >
+
+
+<div class="container">
+<header>
+   <h1>FHEM Home</h1>
+	<a href="#!">Main</a>
+	<a href="#!auto">Automation</a>
+	<a href="#!moni">Monitoring</a>
+</header>
+<div ng-view></div>
+
+<!-- DON`T DELETE!!!  DON`T DELETE!!!  DON`T DELETE!!!  DON`T DELETE!!!  DON`T DELETE!!!  DON`T DELETE!!!  DON`T DELETE!!! -->
+<article ng-repeat="x in realmodel">
+
+<div class="elements">
+	<div class="status">
+	<h4>{{x.Name}} is {{x.Internals.STATE}}</h4>
+	</div>
+	
+	<div class="button">
+<label class="switch" ng-if="!x.Name.includes('energy')">
+  <input type="checkbox" ng-model="lamp" ng-true-value="'on'" ng-false-value="'off'" ng-change="fuchsia(lamp, x.Name)"/>
+  <span class="slider round"></span>
+</label>
+	</div>
+
+	<div class="slidecontainer">
+<input type="range" ng-model="rangemodel" ng-change="rangefunc(rangemodel, x.Name)" ng-if="x.PossibleSets.includes('dim')" />
+	</div>
+	
+</div>
+
+</article>
+<!-- -->
+</div>
+
+<footer>FHEM home</footer>
+</div>
+
+	<script>
+
+        var app = angular.module('myApp', ['socket.io', 'chart.js', 'ngRoute', 'ngMessages']);
+        
+        app.config(function ($socketProvider, $routeProvider) {
+            $socketProvider.setConnectionUrl('http://194.95.194.122:8086');
+			$routeProvider
+			.when("", {
+				templateUrl : "index.html"
+				})
+				.when("/auto", {
+					templateUrl : "automation.html"
+				})
+				.when("/moni", {
+					templateUrl : "monitoring.html"
+				});
+		});
+//---------------------------------------------------------------------------------------------------------------
+		
+//---------------------------------------------------------------------------------------------------------------
+        app.controller('homecontrol', function ($scope, $socket) {
+			
+            $socket.on('connect', function () {
+            });
+			
+			$socket.emit('getAllValuesOnChange');
+			$socket.emit('getAllDevicesOnChange');
+			$socket.emit('getReadingOnChange', {
+				unit: 'unit-name',
+				reading: 'reading-name'
+			});
+
+// Establish connection and just listen 
+			$scope.realmodel = [];
+			$scope.Sets = [];
+			$scope.Setsmini = [];
+			$scope.tasks = [];
+			$scope.energymodel = [];
+			
+			$scope.minitasks = [];
+			$scope.infor = "";
+			$scope.increment = '';
+			$scope.miniactions = [];
+			$scope.selectedcommand = '';
+			
+			$socket.emit('command', 'jsonlist2', function (info) {
+                    	$scope.fromfhem = info.join("");
+						var re = /Bye.../gi;
+						var purestr = $scope.fromfhem.replace(re, " ");
+						var jsobj = JSON.parse(purestr);
+
+						for (var i=0; i < jsobj.Results.length; i++){
+							if (!/((schedule)|(new)|(fs20log)|(temp)|(telnet)|(WEB)|(autocreate)|(global)|(Logfile)|(initialUsb)|(eventTypes)|(CUL)|(FileLog)|(HM_)|(Action)|(energy)|(power))/.test(jsobj.Results[i].Name)){
+								$scope.realmodel.push(jsobj.Results[i]);
+							}
+							
+							else if (/schedule/.test(jsobj.Results[i].Name)) {
+								$scope.tasks.push(jsobj.Results[i]);
+							}
+						}
+						$scope.chartdisplay();
+						console.log($scope.tasks);
+						console.log($scope.realmodel);
+						console.log($scope.energymodel);
+						});
+						
+				$socket.on('value',function(info) {
+				$scope.changes = info;
+				$scope.listenchange(info);
+				console.log(info);
+				$scope.updatechart(info);
+				});
+				
+$scope.listenchange = function(info){
+for (devnam in info) {
+	for (var i=0; i < $scope.realmodel.length; i++) {
+		if ($scope.realmodel[i].Name == devnam){
+			$scope.realmodel[i].Internals.STATE = info[$scope.realmodel[i].Name];
+		}
+	}
+}
+
+};
+$scope.labels = [];
+$scope.data = [];
+
+$scope.updatechart = function(info){
+$scope.data = [];
+	for (devnam in info) {
+		for (var i=0; i < $scope.energymodel.length; i++) {
+			if ($scope.energymodel[i].Name == devnam){
+				$scope.energymodel[i].Attributes.room = info[devnam].substr(-2);
+				console.log($scope.energymodel[i].Attributes.room);
+			}
+		}
+	}
+	$scope.chartdisplay();
+}
+
+$scope.chartdisplay = function(){
+	for (var i=0; i < $scope.energymodel.length; i++) {
+		$scope.labels.push($scope.energymodel[i].Name);
+		$scope.data.push($scope.energymodel[i].Attributes.room);
+	}
+}
+
+$scope.dim = "dim";
+
+$scope.fuchsia = function(data, nam){
+	$socket.emit("commandNoResp", "set "+ nam +" "+ data);
+};
+
+$scope.rangefunc = function(data, nam){
+	$socket.emit("commandNoResp", "set "+ nam + " dim"+ data+"%")
+};
+
+$scope.automate = function(data, comm, tmm){
+	var time = '';
+	var partcommand = '';
+	if (tmm) {
+		time = tmm.toISOString().slice(11, 19);
+	}
+	
+		var complexorbasic = '';
+		var atornotifyorempty = '';
+		var finaltasks = '';
+		
+		var ifpart = " IF ([" + data + "] eq " + '"' + comm + '") '; // Complete!
+		
+		if (time) {
+			atornotifyorempty = " at " + time;
+		} else if (!time) {
+			atornotifyorempty = " notify " + comm;
+		}
+		
+		if ($scope.miniactions.length) {
+			complexorbasic = "complex";
+			finaltasks = "( " + $scope.miniactions + " )";
+		} else if (!$scope.miniactions.length) {
+			complexorbasic = "basic";
+			ifpart = '';
+			finaltasks = ' set ' + data + " " + comm;
+		}
+		
+		if (!$scope.miniactions.length && !time) {
+			partcommand = finaltasks;
+		} else {
+			partcommand = "define " + complexorbasic + data + atornotifyorempty + ifpart + finaltasks;
+		}
+		 
+		console.log(partcommand);
+};
+$scope.cancel = function(order){
+	$socket.emit("commandNoResp", "delete " + order);
+	
+};
+$scope.addaction = function () {
+	$scope.increment = $scope.increment + 2;
+	$scope.minitasks.push($scope.increment);
+}
+
+$scope.checkaction = function(){
+	console.log($scope.miniactions);
+	console.log($scope.selectedcommand);
+}
+
+$scope.savemini = function(object) {
+	$scope.miniactions.push(object);
+	
+}
+
+$scope.saveminiaction = function(selectedMini, selectedcommandmini, timemini) {
+	if (selectedMini && selectedcommandmini) {
+		var object = "set " + selectedMini + " " + selectedcommandmini;
+		$scope.infor = "Saved!";
+		$scope.savemini(object);
+	} else {
+		$scope.infor = "Please complete filling!";
+	}
+}
+
+$scope.deletemini = function(t) {
+	
+	for (var i=0; i <= $scope.minitasks.length; i++) {
+		if (t == $scope.minitasks[i]) {
+			$scope.minitasks.splice(i, 1);
+			$scope.miniactions.splice(i, 1);
+		}
+	}
+}
+$scope.hardcommands = ["dim50%", "dim100%", "on-for-timer", "on-till"];
+
+
+$scope.fillsets = function(arg, number) {
+	var sets = ["on", "off"];
+	console.log(arg);
+	
+		for (var i = 0; i < $scope.realmodel.length; i++) {
+			if ($scope.realmodel[i].Name === arg) {
+				if ($scope.realmodel[i].PossibleSets.length > 1) {
+				console.log("Your number is " + number);
+					var intermed = $scope.realmodel[i].PossibleSets.split(" ");
+						//-------------------------- FILTERING PossibleSets
+						for (var i = 0; i < intermed.length; i++) {
+							for (var j = 0; j < $scope.hardcommands.length; j++) {
+								if ($scope.hardcommands[j] == intermed[i]) {
+										sets.push($scope.hardcommands[j]);
+									}
+								}
+							}
+						}
+					}
+				}
+		
+		if (!$scope.Sets.length) {
+			$scope.Sets = sets;
+		}
+		
+		$scope.Setsmini[number] = [];
+		$scope.Setsmini[number] = sets;
+		
+}
+
+        });
+		
+    </script>
+
+	<style>
+body {
+    background-color: FFF6D7;
+}
+
+	div.container {
+    width: 100%;
+}
+
+header, footer {
+    padding: 2px;
+    color: green;
+    background-color: #D9FEA0;
+    clear: left;
+    text-align: center;
+}
+
+article {
+    padding: 10px;
+    overflow: hidden;
+    background-color: #F0EAEA;
+}
+
+.elements {
+	float:right;
+	padding: 1px 25px 10px 100px;
+	border: 1px solid #888888;
+	//border-radius: 15px;
+	background-color: #ffffdf;
+	margin: 4px 0;
+	height: 80px;
+	width: 100%;
+}
+
+.status {
+	float:left;
+	padding: 20px 5px;
+}
+
+.button {
+	float:right;
+	padding: 20px;
+}
+
+#onicon {
+	background: url(onicon.png) 0 0 no-repeat;
+    width: 60px;
+    height: 60px;
+}
+
+#officon {
+	background: url(officon.png) 0 0 no-repeat;
+    width: 60px;
+    height: 60px;
+}
+
+
+/* The switch - the box around the slider */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+
+/* Hide default HTML checkbox */
+.switch input {display:none;}
+
+/* The slider */
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: #2196F3;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #2196F3;
+}
+
+input:checked + .slider:before {
+  -webkit-transform: translateX(26px);
+  -ms-transform: translateX(26px);
+  transform: translateX(26px);
+}
+
+/* Rounded sliders */
+.slider.round {
+  border-radius: 34px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+.bor {
+    border-style: solid;
+    border-color: coral;
+}
+
+	</style>
+</body>
+</html>
+

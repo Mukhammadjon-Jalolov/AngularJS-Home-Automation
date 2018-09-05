@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>My Home</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+<h3> Configure your home </h3>
+
+<article ng-repeat="t in tasks">
+{{t.Internals.DEF}} <input type="button" value = "Cancel it" ng-click="cancel(t.Name)"/>
+</article>
+
+{{infor}}
+<br>
+<select ng-model="selectedCar" ng-change="fillsets(selectedCar)">
+<option ng-repeat="x in realmodel" value="{{x.Name}}">{{x.Name}}</option>
+</select>
+
+<select ng-model="selectedcommand" >
+<option ng-repeat="x in Sets" value="{{x}}">{{x}}</option>
+</select>
+
+<input type="time" name="start" ng-model="starttime" />
+<input type="button" value = " Set " ng-click="automate(selectedCar, selectedcommand, starttime)"/>
+<br>
+
+<input type="button" value = " Add action " ng-click="addaction(realmodel)"/>
+<!-- input type="button" value = " Check action " ng-click="checkaction(realmodel)"/ -->
+<br>
+
+
+<article ng-repeat="t in minitasks">
+
+<select ng-model="selectedMini" ng-change="fillsets(selectedMini, t)">
+<option ng-repeat="x in realmodel" value="{{x.Name}}">{{x.Name}}</option>
+</select>
+
+<select ng-model="selectedcommandmini" >
+<option ng-repeat="x in Setsmini[t]" value="{{x}}">{{x}}</option>
+</select>
+
+<input type="time" name="start" ng-model="timemini" />
+<input type="button" value = " Delete " ng-click="deletemini(t)"/>
+<input type="button" value = " Save " ng-click="saveminiaction(selectedMini, selectedcommandmini, timemini)"/>
+</article>
+
+
+</body>
+</html>
+
+
